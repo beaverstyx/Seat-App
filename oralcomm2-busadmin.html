@@ -764,8 +764,8 @@
     });
 
     function sessionLineHtml(){
-      const parts = [state.classDate, state.classTime].filter(Boolean);
-      return parts.length ? `<p class="ticket-course">${escapeHtml(parts.join(' &middot; '))}</p>` : '';
+      const parts = [state.classDate, state.classTime].filter(Boolean).map(escapeHtml);
+      return parts.length ? `<p class="ticket-course">${parts.join(' &middot; ')}</p>` : '';
     }
 
     function showTicket(name){
