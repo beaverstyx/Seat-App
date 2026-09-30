@@ -546,8 +546,8 @@
     rows: 6,
     cols: 9,
     seatEnabled: {"A1":false,"A2":false,"A3":true,"A4":true,"A5":true,"A6":true,"A7":true,"A8":true,"A9":false,"B1":false,"B2":false,"B3":true,"B4":true,"B5":true,"B6":true,"B7":true,"B8":true,"B9":false,"C1":false,"C2":false,"C3":true,"C4":true,"C5":true,"C6":true,"C7":true,"C8":true,"C9":false,"D1":false,"D2":false,"D3":true,"D4":true,"D5":true,"D6":true,"D7":true,"D8":true,"D9":false,"E1":false,"E2":false,"E3":true,"E4":true,"E5":true,"E6":true,"E7":true,"E8":true,"E9":false,"F1":false,"F2":false,"F3":true,"F4":true,"F5":true,"F6":true,"F7":true,"F8":true,"F9":false},
-    roster: ["ARIZONO Keita","ARIMURA Yuri","UEDA Haruya","UCHIDA Koichi","KAKITA Yuto","KANAYA Mei","KAWASHIMA Ayame","KIKUKAWA Ryunosuke","KIYOYAMA Asahi","SAIKUSA Kurumi","SAIKUSA Kokomi","SAKAE Ryotaro","SAKAMOTO Haruma","SATO Kota","SHIMOAKA Ryusei","SUGI Wakako","SUGIMORI Hina","TAKAHASHI Mio","TAKEMOTO Harutaro","TACHIYAMA Shinya","TANAKA Koichiro","TANIGUCHI Keita","TSUTSUMI Rento","NAGATANI Mirai","NISHIMURA Yura","HAZURU Aito","HARA Shunta","HARAGUCHI Mei","HIGASHI Uta","HORI Shinnosuke","MIYAHARA Momoko","YAMAGUCHI Takuma","YAMASHITA Toshiharu","YOSHIOKA Hideo","YOSHIDA Tomoka"],
-    assignments: {"D5":"ARIZONO Keita","C3":"ARIMURA Yuri","A4":"UEDA Haruya","A3":"UCHIDA Koichi","B3":"KAKITA Yuto","E8":"KANAYA Mei","E3":"KAWASHIMA Ayame","F4":"KIKUKAWA Ryunosuke","F3":"KIYOYAMA Asahi","B6":"SAIKUSA Kurumi","F5":"SAIKUSA Kokomi","B8":"SAKAE Ryotaro","D4":"SAKAMOTO Haruma","C5":"SATO Kota","C7":"SHIMOAKA Ryusei","C6":"SUGI Wakako","F8":"SUGIMORI Hina","B4":"TAKAHASHI Mio","E6":"TAKEMOTO Harutaro","F6":"TACHIYAMA Shinya","D8":"TANAKA Koichiro","A8":"TANIGUCHI Keita","A5":"TSUTSUMI Rento","A7":"NAGATANI Mirai","B5":"NISHIMURA Yura","E7":"HAZURU Aito","D3":"HARA Shunta","C4":"HARAGUCHI Mei","A6":"HIGASHI Uta","D7":"HORI Shinnosuke","C8":"MIYAHARA Momoko","B7":"YAMAGUCHI Takuma","E4":"YAMASHITA Toshiharu","F7":"YOSHIOKA Hideo","D6":"YOSHIDA Tomoka"},
+    roster: ["004","005","015","020","026","030","032","036","039","049","050","051","053","055","061","063","065","067","070","071","074","075","083","092","096","100","102","103","105","112","125","132","135","138","140"],
+    assignments: {"C3":"004","F3":"005","C6":"015","E5":"020","E3":"026","A4":"030","B8":"032","B7":"036","B3":"039","A3":"049","B4":"050","D4":"051","C7":"053","A6":"055","C4":"061","F4":"063","E6":"065","B5":"067","A8":"070","C5":"071","F6":"074","D7":"075","F7":"083","D3":"092","A5":"096","D5":"100","F8":"102","C8":"103","F5":"105","E7":"112","D6":"125","E8":"132","B6":"135","E4":"138","A7":"140"},
     updatedAt: null,
     classDate: "2026-10-01",
     classTime: "Mon/Thu Period 2 · 10:40–12:10",
@@ -692,10 +692,10 @@
     view.innerHTML = `
       <p class="eyebrow">Before you sit down</p>
       <h1>Find your seat</h1>
-      <p class="sub">Type your name to check today's seating.</p>
+      <p class="sub">Enter your 3-digit code to check today's seating.</p>
 
       <div class="lookup-box">
-        <input type="text" id="nameSearch" placeholder="Start typing your name..." autocomplete="off" value="${escapeHtml(studentQuery)}" />
+        <input type="text" id="nameSearch" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="e.g. 004" autocomplete="off" value="${escapeHtml(studentQuery)}" />
         <div class="match-list" id="matchList"></div>
       </div>
 
@@ -705,7 +705,9 @@
     const searchInput = document.getElementById('nameSearch');
 
     searchInput.addEventListener('input', () => {
-      studentQuery = searchInput.value;
+      const digitsOnly = searchInput.value.replace(/\D/g, '').slice(0, 3);
+      if(digitsOnly !== searchInput.value) searchInput.value = digitsOnly;
+      studentQuery = digitsOnly;
       refreshStudentResults();
     });
 
@@ -728,7 +730,7 @@
       ? Object.values(state.groupAssignments).flat()
       : Object.values(state.assignments);
 
-    const q = studentQuery.trim().toLowerCase();
+    const q = studentQuery.trim();
     matchList.innerHTML = '';
     resultArea.innerHTML = '';
     if(q.length === 0){
@@ -738,30 +740,18 @@
       return;
     }
 
-    const matches = placedNames.filter(n => n.toLowerCase().includes(q));
+    if(q.length < 3){
+      resultArea.innerHTML = `<p class="empty-note">KEEP TYPING — ENTER ALL 3 DIGITS OF YOUR CODE</p>`;
+      return;
+    }
 
-    if(matches.length === 0){
-      resultArea.innerHTML = `<p class="empty-note">NO STUDENT FOUND WITH THAT NAME YET</p>`;
+    const exact = placedNames.find(n => n === q);
+
+    if(!exact){
+      resultArea.innerHTML = `<p class="empty-note">NO SEAT FOUND FOR THAT CODE YET</p>`;
       return;
     }
-    if(matches.length === 1 || matches.some(m => m.toLowerCase() === q)){
-      const exact = matches.find(m => m.toLowerCase() === q) || matches[0];
-      showTicket(exact);
-      return;
-    }
-    matches.slice(0, 8).forEach(name => {
-      const btn = document.createElement('button');
-      btn.className = 'match-item';
-      btn.textContent = name;
-      btn.addEventListener('click', () => {
-        studentQuery = name;
-        const input = document.getElementById('nameSearch');
-        if(input) input.value = name;
-        matchList.innerHTML = '';
-        showTicket(name);
-      });
-      matchList.appendChild(btn);
-    });
+    showTicket(exact);
 
     function sessionLineHtml(){
       const parts = [state.classDate, state.classTime].filter(Boolean).map(escapeHtml);
@@ -949,8 +939,8 @@
 
       <div class="panel">
         <h2>Class roster</h2>
-        <p class="desc">One student name per line.</p>
-        <textarea class="roster-input" id="rosterInput" placeholder="Yuki Tanaka&#10;Aoi Matsumoto&#10;...">${state.roster.join('\n')}</textarea>
+        <p class="desc">One 3-digit student code per line. Cross-reference codes to names on your own printed roster — no names are stored here.</p>
+        <textarea class="roster-input" id="rosterInput" placeholder="004&#10;005&#10;...">${state.roster.join('\n')}</textarea>
         <div class="row-flex" style="margin-top:10px;">
           <button class="ghost-btn" id="saveRosterBtn">Save roster</button>
           <span class="status-line">${state.roster.length} student${state.roster.length===1?'':'s'} on roster</span>
