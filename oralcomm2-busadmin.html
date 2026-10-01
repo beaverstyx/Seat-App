@@ -99,6 +99,7 @@
   }
   h1{ font-family: var(--font-display); font-size: 26px; margin: 0 0 4px; }
   .sub{ color: rgba(251,246,235,0.6); font-size: 14px; margin: 0 0 24px; }
+  .sub-ja{ color: rgba(251,246,235,0.45); font-size: 12.5px; margin: -20px 0 24px; }
 
   /* ================= STUDENT VIEW ================= */
   .lookup-box{
@@ -244,6 +245,14 @@
     box-shadow: 0 0 0 3px rgba(232,163,61,0.3);
   }
   .mini-map-label{ text-align:center; font-family: var(--font-mono); font-size:10.5px; letter-spacing:0.1em; color: rgba(251,246,235,0.4); margin-top:12px; text-transform:uppercase; }
+  .mini-label{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: rgba(251,246,235,0.4);
+  }
 
   /* Group zone diagram */
   .zone-grid{
@@ -431,6 +440,16 @@
     letter-spacing: 0.06em;
   }
   .flap.gap .flap-code{ color: #E9A18F; font-weight:600; font-size:13px; }
+  .grid-label{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    color: rgba(251,246,235,0.45);
+    text-transform: uppercase;
+  }
   .flap-name{
     font-size: 10.5px;
     line-height: 1.15;
@@ -545,9 +564,9 @@
   let state = {
     rows: 6,
     cols: 9,
-    seatEnabled: {"A1":false,"A2":false,"A3":true,"A4":true,"A5":true,"A6":true,"A7":true,"A8":true,"A9":false,"B1":false,"B2":false,"B3":true,"B4":true,"B5":true,"B6":true,"B7":true,"B8":true,"B9":false,"C1":false,"C2":false,"C3":true,"C4":true,"C5":true,"C6":true,"C7":true,"C8":true,"C9":false,"D1":false,"D2":false,"D3":true,"D4":true,"D5":true,"D6":true,"D7":true,"D8":true,"D9":false,"E1":false,"E2":false,"E3":true,"E4":true,"E5":true,"E6":true,"E7":true,"E8":true,"E9":false,"F1":false,"F2":false,"F3":true,"F4":true,"F5":true,"F6":true,"F7":true,"F8":true,"F9":false},
+    seatEnabled: {"1A":false,"1B":false,"1C":true,"1D":true,"1E":true,"1F":true,"1G":true,"1H":true,"1I":false,"2A":false,"2B":false,"2C":true,"2D":true,"2E":true,"2F":true,"2G":true,"2H":true,"2I":false,"3A":false,"3B":false,"3C":true,"3D":true,"3E":true,"3F":true,"3G":true,"3H":true,"3I":false,"4A":false,"4B":false,"4C":true,"4D":true,"4E":true,"4F":true,"4G":true,"4H":true,"4I":false,"5A":false,"5B":false,"5C":true,"5D":true,"5E":true,"5F":true,"5G":true,"5H":true,"5I":false,"6A":false,"6B":false,"6C":true,"6D":true,"6E":true,"6F":true,"6G":true,"6H":true,"6I":false},
     roster: ["004","005","015","020","026","030","032","036","039","049","050","051","053","055","061","063","065","067","070","071","074","075","083","092","096","100","102","103","105","112","125","132","135","138","140"],
-    assignments: {"C3":"004","F3":"005","C6":"015","E5":"020","E3":"026","A4":"030","B8":"032","B7":"036","B3":"039","A3":"049","B4":"050","D4":"051","C7":"053","A6":"055","C4":"061","F4":"063","E6":"065","B5":"067","A8":"070","C5":"071","F6":"074","D7":"075","F7":"083","D3":"092","A5":"096","D5":"100","F8":"102","C8":"103","F5":"105","E7":"112","D6":"125","E8":"132","B6":"135","E4":"138","A7":"140"},
+    assignments: {"6F":"004","3G":"005","4E":"015","3C":"020","4H":"026","1G":"030","5E":"032","5D":"036","2G":"039","5H":"049","2E":"050","3D":"051","3H":"053","1D":"055","4C":"061","1C":"063","5G":"065","2D":"067","6G":"070","6H":"071","6C":"074","6D":"075","6E":"083","1H":"092","4D":"096","5C":"100","4G":"102","2C":"103","2F":"105","3E":"112","5F":"125","1E":"132","3F":"135","4F":"138","2H":"140"},
     updatedAt: null,
     classDate: "2026-10-01",
     classTime: "Mon/Thu Period 2 · 10:40–12:10",
@@ -565,8 +584,13 @@
     </div>`;
   }
 
-  function rowLetter(i){ return String.fromCharCode(65 + i); }
-  function seatKey(r, c){ return rowLetter(r) + (c + 1); }
+  function colLetter(i){ return String.fromCharCode(65 + i); }
+  function seatKey(r, c){ return (r + 1) + colLetter(c); }
+  function parseSeatKey(key){
+    const m = String(key).match(/^(\d+)([A-Za-z])$/);
+    if(!m) return { row: 0, col: 0 };
+    return { row: parseInt(m[1], 10) - 1, col: m[2].toUpperCase().charCodeAt(0) - 65 };
+  }
 
   function allSeatKeys(){
     const keys = [];
@@ -692,7 +716,8 @@
     view.innerHTML = `
       <p class="eyebrow">Before you sit down</p>
       <h1>Find your seat</h1>
-      <p class="sub">Enter your 3-digit code to check today's seating.</p>
+      <p class="sub">Enter the last three digits of your student number to check today's seating.</p>
+      <p class="sub-ja">学生番号の下3桁を入力してください。</p>
 
       <div class="lookup-box">
         <input type="text" id="nameSearch" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="e.g. 004" autocomplete="off" value="${escapeHtml(studentQuery)}" />
@@ -770,8 +795,7 @@
       const entry = Object.entries(state.assignments).find(([k,v]) => v === name);
       if(!entry){ resultArea.innerHTML = `<p class="empty-note">SEAT NOT FOUND</p>`; return; }
       const [key] = entry;
-      const rowIdx = key.charCodeAt(0) - 65;
-      const colIdx = parseInt(key.slice(1), 10) - 1;
+      const { row: rowIdx, col: colIdx } = parseSeatKey(key);
 
       resultArea.innerHTML = `
         <div class="ticket-wrap">
@@ -779,7 +803,7 @@
             <div class="ticket-top">
               <p class="eyebrow" style="margin-bottom:6px;">Boarding confirmed</p>
               <p class="ticket-name">${escapeHtml(name)}</p>
-              <p class="ticket-course">Row ${rowLetter(rowIdx)} &middot; Seat ${colIdx+1}</p>
+              <p class="ticket-course">Row ${rowIdx+1} &middot; Seat ${colLetter(colIdx)}</p>
               ${sessionLineHtml()}
             </div>
             <div class="ticket-perf"></div>
@@ -794,13 +818,24 @@
         </div>
         <div class="room-card">
           <div class="front-marker">↑ Front of room</div>
-          <div class="mini-map" id="miniMap" style="grid-template-columns: repeat(${state.cols}, 20px);"></div>
+          <div class="mini-map" id="miniMap" style="grid-template-columns: 16px repeat(${state.cols}, 20px); grid-template-rows: 14px repeat(${state.rows}, 20px);"></div>
         </div>
         <p class="mini-map-label">Room layout &middot; your seat highlighted</p>
       `;
 
       const miniMap = document.getElementById('miniMap');
+      miniMap.appendChild(document.createElement('div')); // corner
+      for(let c=0; c<state.cols; c++){
+        const h = document.createElement('div');
+        h.className = 'mini-label';
+        h.textContent = colLetter(c);
+        miniMap.appendChild(h);
+      }
       for(let r=0; r<state.rows; r++){
+        const rowLabelEl = document.createElement('div');
+        rowLabelEl.className = 'mini-label';
+        rowLabelEl.textContent = (r+1);
+        miniMap.appendChild(rowLabelEl);
         for(let c=0; c<state.cols; c++){
           const k = seatKey(r,c);
           const cell = document.createElement('div');
@@ -992,7 +1027,7 @@
       <div class="panel">
         <h2>Seat map</h2>
         <p class="board-hint">Click a seat to assign or clear it by hand. Click a gap to toggle it back into a seat.</p>
-        <div class="board" id="board" style="grid-template-columns: repeat(${state.cols}, 68px);"></div>
+        <div class="board" id="board" style="grid-template-columns: 28px repeat(${state.cols}, 68px); grid-template-rows: 24px repeat(${state.rows}, 58px);"></div>
         <p class="status-line"><b>${assignedCount}</b> of <b>${enabledSeats.length}</b> seats filled &middot; <b>${unassignedNames.length}</b> student${unassignedNames.length===1?'':'s'} unseated</p>
         <div class="actions-row">
           <button class="primary-btn" id="shuffleBtn">Shuffle seats</button>
@@ -1102,7 +1137,18 @@
     const board = document.getElementById('board');
     if(!board) return;
     board.innerHTML = '';
+    board.appendChild(document.createElement('div')); // corner
+    for(let c=0; c<state.cols; c++){
+      const h = document.createElement('div');
+      h.className = 'grid-label';
+      h.textContent = colLetter(c);
+      board.appendChild(h);
+    }
     for(let r=0; r<state.rows; r++){
+      const rowLabelEl = document.createElement('div');
+      rowLabelEl.className = 'grid-label';
+      rowLabelEl.textContent = (r+1);
+      board.appendChild(rowLabelEl);
       for(let c=0; c<state.cols; c++){
         const key = seatKey(r,c);
         const cell = document.createElement('div');
