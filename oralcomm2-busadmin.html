@@ -549,9 +549,13 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
 <script>
 (function(){
-  const TEACHER_PIN = "2468"; // prototype-only soft gate, not real security
+  const CLASS_ID = "oralcomm2";
 
   const view = document.getElementById('view');
   const modeToggleBtn = document.getElementById('modeToggleBtn');
@@ -644,35 +648,32 @@
     return null;
   }
 
-  // ---------- Storage ----------
+  // ---------- Storage (Firebase) ----------
   let lastStorageError = null;
+  let db = null, auth = null, docRef = null;
 
-  async function loadState(){
-    if(!storageAvailable){ lastStorageError = 'window.storage is not available in this view.'; ensureSeatDefaults(); return; }
+  function initFirebase(){
+    const cfg = window.SEATCHECK_FIREBASE;
+    if(typeof firebase === 'undefined'){ lastStorageError = 'Firebase library did not load.'; return false; }
+    if(!cfg || !cfg.apiKey || String(cfg.apiKey).indexOf('PASTE') === 0){ lastStorageError = 'Firebase is not configured yet.'; return false; }
     try{
-      const result = await window.storage.get('seatcheck-config', true);
-      if(result && result.value){
-        const parsed = JSON.parse(result.value);
-        state = Object.assign(state, parsed);
-      }
-      lastStorageError = null;
+      firebase.initializeApp(cfg);
+      db = firebase.firestore();
+      auth = firebase.auth();
+      docRef = db.collection('classes').doc(CLASS_ID);
+      return true;
     }catch(e){
-      // Accessing a key that has never been saved also throws — that's expected
-      // the very first time. Keep the message anyway so real failures are visible.
       lastStorageError = (e && e.message) ? e.message : String(e);
+      return false;
     }
-    ensureSeatDefaults();
   }
 
   async function saveState(){
-    if(!storageAvailable){ lastStorageError = 'window.storage is not available in this view.'; return false; }
+    if(!docRef){ lastStorageError = lastStorageError || 'Firebase is not set up.'; return false; }
+    if(!auth || !auth.currentUser){ lastStorageError = 'Not signed in.'; return false; }
     state.updatedAt = new Date().toISOString();
     try{
-      const result = await window.storage.set('seatcheck-config', JSON.stringify(state), true);
-      if(!result){
-        lastStorageError = 'Storage returned no result — the write may not have been accepted.';
-        return false;
-      }
+      await docRef.set(JSON.parse(JSON.stringify(state)));
       lastStorageError = null;
       return true;
     }catch(e){
@@ -680,6 +681,11 @@
       console.error('Save failed', e);
       return false;
     }
+  }
+
+  async function autoPublish(){
+    const ok = await saveState();
+    showToast(ok ? 'Published — students see it now' : ('Publish failed: ' + (lastStorageError || 'unknown error')));
   }
 
   // ---------- Rendering: routing ----------
@@ -901,30 +907,35 @@
     return div.innerHTML;
   }
 
-  // ---------- PIN gate ----------
+  // ---------- Teacher sign-in ----------
   function renderPinGate(){
+    const cfg = window.SEATCHECK_FIREBASE || {};
     view.innerHTML = `
       <p class="eyebrow">Staff access</p>
       <h1>Teacher setup</h1>
-      <p class="sub">Enter the setup code to edit seating.</p>
+      <p class="sub">Sign in to edit seating.</p>
       <div class="pin-box">
-        <input type="password" id="pinInput" maxlength="8" placeholder="••••" inputmode="numeric" />
+        <input type="email" id="loginEmail" placeholder="Email" autocomplete="username" style="letter-spacing:normal;font-size:15px;" value="${escapeAttr(cfg.teacherEmail || '')}" />
+        <input type="password" id="pinInput" placeholder="Password" autocomplete="current-password" style="letter-spacing:normal;font-size:15px;" />
         <p class="error-text" id="pinError"></p>
-        <button class="primary-btn" id="pinSubmit" style="width:100%;">Unlock</button>
+        <button class="primary-btn" id="pinSubmit" style="width:100%;">Sign in</button>
       </div>
     `;
+    const emailInput = document.getElementById('loginEmail');
     const pinInput = document.getElementById('pinInput');
     const pinError = document.getElementById('pinError');
-    document.getElementById('pinSubmit').addEventListener('click', tryUnlock);
-    pinInput.addEventListener('keydown', e => { if(e.key === 'Enter') tryUnlock(); });
-    pinInput.focus();
+    document.getElementById('pinSubmit').addEventListener('click', trySignIn);
+    pinInput.addEventListener('keydown', e => { if(e.key === 'Enter') trySignIn(); });
+    (emailInput.value ? pinInput : emailInput).focus();
 
-    function tryUnlock(){
-      if(pinInput.value === TEACHER_PIN){
-        teacherUnlocked = true;
-        render();
-      } else {
-        pinError.textContent = 'Incorrect code — try again.';
+    async function trySignIn(){
+      if(!auth){ pinError.textContent = lastStorageError || 'Firebase is not set up yet.'; return; }
+      pinError.textContent = '';
+      try{
+        await auth.signInWithEmailAndPassword(emailInput.value.trim(), pinInput.value);
+        // onAuthStateChanged will unlock and re-render
+      }catch(e){
+        pinError.textContent = 'Sign-in failed — check email and password.';
       }
     }
   }
@@ -1019,9 +1030,10 @@
         <div class="actions-row">
           <button class="primary-btn" id="shuffleGroupsBtn">Shuffle groups</button>
           <button class="ghost-btn" id="publishBtn">Save &amp; publish</button>
+          <button class="ghost-btn" id="signOutBtn">Sign out</button>
           <button class="danger-btn" id="clearGroupsBtn">Clear all groups</button>
         </div>
-        ${lastStorageError ? `<p class="error-text" style="margin-top:10px;">Last storage error: ${escapeHtml(lastStorageError)}</p>` : ''}
+        <p class="desc" style="margin-top:10px;">Shuffles, clears, date and roster changes publish to students automatically. After placing students by hand, tap “Save &amp; publish”.</p>
       </div>
       ` : `
       <div class="panel">
@@ -1032,9 +1044,10 @@
         <div class="actions-row">
           <button class="primary-btn" id="shuffleBtn">Shuffle seats</button>
           <button class="ghost-btn" id="publishBtn">Save &amp; publish</button>
+          <button class="ghost-btn" id="signOutBtn">Sign out</button>
           <button class="danger-btn" id="clearBtn">Clear all assignments</button>
         </div>
-        ${lastStorageError ? `<p class="error-text" style="margin-top:10px;">Last storage error: ${escapeHtml(lastStorageError)}</p>` : ''}
+        <p class="desc" style="margin-top:10px;">Shuffles, clears, date and roster changes publish to students automatically. After placing students by hand, tap “Save &amp; publish”.</p>
       </div>
       `}
     `;
@@ -1042,16 +1055,18 @@
     document.getElementById('saveSessionBtn').addEventListener('click', () => {
       state.classDate = document.getElementById('classDateInput').value;
       state.classTime = document.getElementById('classTimeInput').value.trim();
-      showToast('Session details saved');
+      autoPublish();
     });
 
     document.getElementById('modeSeatsRadio').addEventListener('change', () => {
       state.assignMode = 'seats';
       render();
+      autoPublish();
     });
     document.getElementById('modeGroupsRadio').addEventListener('change', () => {
       state.assignMode = 'groups';
       render();
+      autoPublish();
     });
 
     if(!isGroupMode){
@@ -1077,13 +1092,18 @@
       Object.keys(state.groupAssignments).forEach(g => {
         state.groupAssignments[g] = state.groupAssignments[g].filter(n => names.includes(n));
       });
-      showToast('Roster saved');
       render();
+      autoPublish();
     });
 
     document.getElementById('publishBtn').addEventListener('click', async () => {
-      const ok = await saveState();
-      showToast(ok ? 'Published — students can check now' : ('Save failed: ' + (lastStorageError || 'unknown error')));
+      await autoPublish();
+      render();
+    });
+    document.getElementById('signOutBtn').addEventListener('click', async () => {
+      try{ if(auth) await auth.signOut(); }catch(e){}
+      teacherUnlocked = false;
+      mode = 'student';
       render();
     });
 
@@ -1097,10 +1117,12 @@
         if(state.roster.length === 0){ showToast('Add students to the roster first'); return; }
         shuffleGroups();
         render();
+        autoPublish();
       });
       document.getElementById('clearGroupsBtn').addEventListener('click', () => {
         state.groupAssignments = {};
         render();
+        autoPublish();
       });
       renderTeacherZoneGrid();
     } else {
@@ -1111,6 +1133,7 @@
       document.getElementById('clearBtn').addEventListener('click', () => {
         state.assignments = {};
         render();
+        autoPublish();
       });
       renderBoard();
     }
@@ -1313,6 +1336,7 @@
             if(completed === enabledCells.length){
               state.assignments = finalAssignments;
               updateStatusLine();
+              autoPublish();
             }
           }
         }, 90);
@@ -1321,28 +1345,39 @@
   }
 
   // ---------- Boot ----------
+  function updateFlightTag(){
+    flightTag.textContent = state.updatedAt
+      ? ('UPD ' + new Date(state.updatedAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}))
+      : '';
+  }
+
   async function boot(){
     view.innerHTML = `<p class="empty-note">Loading seating data...</p>`;
-    await loadState();
-    render();
+    ensureSeatDefaults();
+    if(!initFirebase()){ render(); return; }
 
-    // light polling so students see updates without reloading
-    setInterval(async () => {
-      if(mode === 'student'){
-        const prevAssignments = JSON.stringify(state.assignments);
-        try{
-          const result = await window.storage.get('seatcheck-config', true);
-          if(result && result.value){
-            const parsed = JSON.parse(result.value);
-            state = Object.assign(state, parsed);
-            ensureSeatDefaults();
-            if(JSON.stringify(state.assignments) !== prevAssignments){
-              refreshStudentResults();
-            }
-          }
-        }catch(e){ /* ignore */ }
+    auth.onAuthStateChanged(user => {
+      const was = teacherUnlocked;
+      teacherUnlocked = !!user;
+      if(was !== teacherUnlocked && mode === 'teacher') render();
+    });
+
+    let first = true;
+    docRef.onSnapshot(snap => {
+      if(snap.metadata && snap.metadata.hasPendingWrites) return;
+      const exists = (typeof snap.exists === 'function') ? snap.exists() : snap.exists;
+      const editing = (mode === 'teacher' && teacherUnlocked);
+      if(exists && !(editing && !first)){
+        state = Object.assign(state, snap.data());
+        ensureSeatDefaults();
       }
-    }, 8000);
+      lastStorageError = null;
+      if(first){ first = false; render(); }
+      else if(mode === 'student'){ refreshStudentResults(); updateFlightTag(); }
+    }, err => {
+      lastStorageError = (err && err.message) ? err.message : String(err);
+      if(first){ first = false; render(); }
+    });
   }
 
   boot();
