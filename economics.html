@@ -610,6 +610,17 @@
     return state.seatEnabled[key] !== false; // default true
   }
 
+  // The real room has 8 rows. If a class uses fewer, the remaining rows are shown as blocked
+  // so a back-row seat is never mistaken for the last row of the room.
+  const ROOM_ROWS = 8;
+  function padToRoomRows(){
+    if(state.rows >= ROOM_ROWS) return;
+    for(let r = state.rows; r < ROOM_ROWS; r++){
+      for(let c = 0; c < state.cols; c++){ state.seatEnabled[seatKey(r, c)] = false; }
+    }
+    state.rows = ROOM_ROWS;
+  }
+
   function ensureSeatDefaults(){
     allSeatKeys().forEach(k => {
       if(!(k in state.seatEnabled)) state.seatEnabled[k] = true;
@@ -1283,6 +1294,13 @@
   }
 
   function runShuffleAnimation(){
+    // Re-open seats the previous shuffle blocked for being empty, so each shuffle
+    // starts from the full set of real seats (handles roster changes too).
+    if(state.autoBlocked && state.autoBlocked.length){
+      state.autoBlocked.forEach(k => { state.seatEnabled[k] = true; });
+      state.autoBlocked = [];
+      renderBoard();
+    }
     const board = document.getElementById('board');
     const cells = Array.from(board.querySelectorAll('.flap'));
     const enabledCells = cells.filter(c => isEnabled(c.dataset.key));
@@ -1335,8 +1353,15 @@
             completed++;
             if(completed === enabledCells.length){
               state.assignments = finalAssignments;
+              // Block every seat left empty by this shuffle so it can't be mistaken for an open seat.
+              state.autoBlocked = enabledCells.map(c => c.dataset.key).filter(k => !finalAssignments[k]);
+              state.autoBlocked.forEach(k => { state.seatEnabled[k] = false; });
+              renderBoard();
               updateStatusLine();
-              autoPublish();
+              const overflow = names.length - enabledCells.length;
+              autoPublish().then(() => {
+                if(overflow > 0) showToast('Not enough seats: ' + overflow + ' student(s) unseated. Click a blocked seat to open it, then shuffle again.');
+              });
             }
           }
         }, 90);
@@ -1353,6 +1378,7 @@
 
   async function boot(){
     view.innerHTML = `<p class="empty-note">Loading seating data...</p>`;
+    padToRoomRows();
     ensureSeatDefaults();
     if(!initFirebase()){ render(); return; }
 
@@ -1369,6 +1395,7 @@
       const editing = (mode === 'teacher' && teacherUnlocked);
       if(exists && !(editing && !first)){
         state = Object.assign(state, snap.data());
+        padToRoomRows();
         ensureSeatDefaults();
       }
       lastStorageError = null;
