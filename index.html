@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#12213E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="SeatCheck">
+<link rel="manifest" href="manifest-index.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>SeatCheck — Choose your class</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root{
+    --ink: #12213E;
+    --ink-2: #1C2E52;
+    --ink-3: #263B66;
+    --paper: #FBF6EB;
+    --amber: #E8A33D;
+    --green: #3F8F6A;
+    --coral: #C1553D;
+    --line: rgba(251,246,235,0.14);
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'IBM Plex Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{ background: var(--ink); color: var(--paper); font-family: var(--font-body); min-height: 100vh; }
+  button{ font-family: inherit; }
+  ::selection{ background: var(--amber); color: var(--ink); }
+  :focus-visible{ outline: 2px solid var(--amber); outline-offset: 2px; }
+
+  .app-shell{ max-width: 840px; margin: 0 auto; min-height: 100vh; display:flex; flex-direction:column; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+  .brand{ font-family: var(--font-display); font-weight:700; font-size:20px; letter-spacing:0.02em; display:flex; align-items:center; gap:8px; }
+  .brand .tag{ color: var(--amber); }
+  main{ flex:1; padding: 28px 20px 60px; }
+
+  .eyebrow{ font-family: var(--font-mono); font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color: var(--amber); margin:0 0 6px; }
+  h1{ font-family: var(--font-display); font-size:26px; margin:0 0 4px; }
+  .sub{ color: rgba(251,246,235,0.6); font-size:14px; margin:0 0 24px; }
+  .sub-ja{ color: rgba(251,246,235,0.45); font-size:12.5px; margin:-20px 0 24px; }
+
+  .class-list{ display:flex; flex-direction:column; gap:12px; max-width: 520px; }
+  .class-card{
+    display:grid;
+    grid-template-columns: 92px 1fr;
+    align-items:stretch;
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    color: inherit;
+    text-decoration:none;
+    overflow:hidden;
+    transition: border-color 0.15s, transform 0.12s;
+  }
+  .class-card:hover{ border-color: var(--amber); }
+  .class-card:active{ transform: scale(0.99); }
+  .class-card.live{ border-color: var(--amber); box-shadow: 0 0 0 3px rgba(232,163,61,0.18); }
+
+  .slot{
+    background: var(--ink);
+    border-right: 1px dashed rgba(251,246,235,0.22);
+    padding: 14px 8px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+    font-family: var(--font-mono);
+    text-align:center;
+  }
+  .slot .time{ font-size:17px; font-weight:600; color: var(--amber); letter-spacing:0.02em; }
+  .slot .period{ font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color: rgba(251,246,235,0.5); }
+
+  .info{ padding: 14px 16px; display:flex; flex-direction:column; justify-content:center; gap:3px; min-width:0; }
+  .info .course{ font-family: var(--font-display); font-weight:700; font-size:16px; }
+  .info .major{ font-size:14px; color: rgba(251,246,235,0.85); }
+  .info .days{ font-family: var(--font-mono); font-size:11px; letter-spacing:0.08em; color: rgba(251,246,235,0.5); text-transform:uppercase; }
+  .badge{
+    align-self:flex-start;
+    margin-top:6px;
+    font-family: var(--font-mono); font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase;
+    color: var(--ink); background: var(--amber);
+    padding: 3px 8px; border-radius: 999px; font-weight:600;
+  }
+  .badge.soon{ background: transparent; color: var(--amber); border: 1px solid var(--amber); }
+
+  .ghost-btn{ background: transparent; border:1px solid rgba(251,246,235,0.3); color: var(--paper); padding: 8px 14px; border-radius: 8px; cursor:pointer; font-size:13px; }
+  .install-hint{ margin-top: 30px; max-width:520px; text-align:center; }
+  .install-help{ font-size:12.5px; line-height:1.7; color: rgba(251,246,235,0.6); margin: 12px 0 0; }
+  .note{ margin-top: 22px; max-width:520px; font-family: var(--font-mono); font-size:11px; letter-spacing:0.06em; color: rgba(251,246,235,0.4); text-align:center; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand">✈ SEAT<span class="tag">CHECK</span></div>
+  </header>
+  <main id="view"></main>
+</div>
+
+<script>
+(function(){
+  // Class list. "days" use JavaScript weekday numbers (0 = Sunday ... 6 = Saturday).
+  const CLASSES = [
+    { id:'oralcomm2', page:'oralcomm2-busadmin.html', major:'Business Administration', days:[1,4], dayText:'Mon / Thu', period:2, start:'10:40', end:'12:10' },
+    { id:'economics',          page:'economics.html',          major:'Economics',               days:[2,5], dayText:'Tue / Fri', period:1, start:'09:00', end:'10:40' },
+    { id:'pubpol',             page:'pubpol.html',             major:'Public Policy',           days:[2,5], dayText:'Tue / Fri', period:2, start:'10:40', end:'12:10' }
+  ];
+  const COURSE = 'Oral Communication II';
+  const STORE_KEY = 'seatcheck-class';
+  const LEAD_MIN = 10; // seats open this many minutes before start; also when "starting soon" shows
+
+  const view = document.getElementById('view');
+
+  function getStored(){ try{ return localStorage.getItem(STORE_KEY); }catch(e){ return null; } }
+  function setStored(id){ try{ localStorage.setItem(STORE_KEY, id); }catch(e){} }
+  function toMin(hhmm){ const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; }
+
+  // Returns 'now' | 'soon' | 'today' | '' for a class, based on this device's clock.
+  function statusOf(c, now){
+    if(!c.days.includes(now.getDay())) return '';
+    const cur = now.getHours() * 60 + now.getMinutes();
+    const s = toMin(c.start), e = toMin(c.end);
+    if(cur >= s && cur <= e) return 'now';
+    if(cur >= s - LEAD_MIN && cur < s) return 'soon';
+    if(cur < s) return 'today';
+    return '';
+  }
+
+  // Go straight to a remembered class unless the student asked to change it.
+  const params = new URLSearchParams(location.search);
+  const remembered = getStored();
+  if(!params.has('choose') && remembered){
+    const hit = CLASSES.find(c => c.id === remembered);
+    if(hit){ location.replace(hit.page); return; }
+  }
+
+  function render(){
+    const now = new Date();
+    const rank = { now:0, soon:1, today:2, '':3 };
+    const rows = CLASSES.map((c, i) => ({ c, i, st: statusOf(c, now) }))
+      .sort((a, b) => (rank[a.st] - rank[b.st]) || (a.i - b.i));
+
+    view.innerHTML = `
+      <p class="eyebrow">Before you sit down</p>
+      <h1>Choose your class</h1>
+      <p class="sub">Pick your class to find your seat.</p>
+      <p class="sub-ja">クラスを選んでください。</p>
+      <div class="class-list">
+        ${rows.map(({ c, st }) => `
+          <a class="class-card${(st === 'now' || st === 'soon') ? ' live' : ''}" href="${c.page}" data-id="${c.id}">
+            <div class="slot">
+              <span class="time">${c.start}</span>
+              <span class="period">Period ${c.period}</span>
+            </div>
+            <div class="info">
+              <span class="course">${COURSE}</span>
+              <span class="major">${c.major}</span>
+              <span class="days">${c.dayText} · ${c.start}–${c.end}</span>
+              ${st === 'now' ? '<span class="badge">In session · 授業中</span>' : ''}
+              ${st === 'soon' ? '<span class="badge soon">Starting soon · まもなく</span>' : ''}
+            </div>
+          </a>`).join('')}
+      </div>
+      <p class="note">YOUR CHOICE IS REMEMBERED ON THIS DEVICE · 選んだクラスはこの端末に保存されます</p>
+      <div id="installArea"></div>
+    `;
+
+    view.querySelectorAll('.class-card').forEach(a => {
+      a.addEventListener('click', () => setStored(a.dataset.id));
+    });
+    setupInstallHint();
+  }
+
+  // ---------- Install hint (Add to Home Screen) ----------
+  let deferredInstall = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; setupInstallHint(); });
+  window.addEventListener('appinstalled', () => { deferredInstall = null; setupInstallHint(); });
+
+  function isStandalone(){
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  }
+
+  function setupInstallHint(){
+    const area = document.getElementById('installArea');
+    if(!area) return;
+    if(isStandalone()){ area.innerHTML = ''; return; }
+    area.innerHTML = `<div class="install-hint">
+        <button class="ghost-btn" id="installBtn">Add to Home Screen · ホーム画面に追加</button>
+        <p class="install-help" id="installHelp" hidden></p>
+      </div>`;
+    document.getElementById('installBtn').addEventListener('click', async () => {
+      if(deferredInstall){
+        deferredInstall.prompt();
+        try{ await deferredInstall.userChoice; }catch(e){}
+        deferredInstall = null;
+        setupInstallHint();
+        return;
+      }
+      const help = document.getElementById('installHelp');
+      const ua = navigator.userAgent || '';
+      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      help.innerHTML = isIOS
+        ? 'In Safari, tap the Share button, then “Add to Home Screen”.<br>Safariで共有ボタン →「ホーム画面に追加」をタップしてください。'
+        : 'Open your browser menu and choose “Install app” or “Add to Home Screen”.<br>ブラウザのメニューから「アプリをインストール」または「ホーム画面に追加」を選んでください。';
+      help.hidden = false;
+    });
+  }
+
+  render();
+
+  if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  }
+})();
+</script>
+</body>
+</html>

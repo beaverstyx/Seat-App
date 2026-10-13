@@ -3,7 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SeatCheck — Oral Comm II (Business Admin)</title>
+<meta name="theme-color" content="#12213E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Bus. Admin">
+<link rel="manifest" href="manifest-oralcomm2-busadmin.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>SeatCheck — Oral Comm II (Business Administration)</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
@@ -535,6 +543,11 @@
     .flap-name{ font-size:9px; max-width:46px; }
     .seat-code{ font-size: 32px; }
   }
+  .switch-class{ margin:26px 0 0; text-align:center; font-size:12.5px; }
+  .switch-class a{ color: rgba(251,246,235,0.55); text-decoration: underline; }
+  .install-hint{ margin-top: 26px; text-align:center; }
+  .install-hint .ghost-btn{ font-size: 13px; padding: 8px 14px; }
+  .install-help{ font-size: 12.5px; line-height: 1.7; color: rgba(251,246,235,0.6); margin: 12px 0 0; }
 </style>
 </head>
 <body>
@@ -556,6 +569,9 @@
 <script>
 (function(){
   const CLASS_ID = "oralcomm2";
+  // Seats are shown to students only from OPEN_LEAD_MIN minutes before class starts, on class days (device clock).
+  const SCHEDULE = { days: [1,4], start: "10:40" };
+  const OPEN_LEAD_MIN = 10;
 
   const view = document.getElementById('view');
   const modeToggleBtn = document.getElementById('modeToggleBtn');
@@ -661,6 +677,7 @@
 
   // ---------- Storage (Firebase) ----------
   let lastStorageError = null;
+  let loadFailed = false; // true when the live seating data could not be reached
   let db = null, auth = null, docRef = null;
 
   function initFirebase(){
@@ -682,6 +699,7 @@
   async function saveState(){
     if(!docRef){ lastStorageError = lastStorageError || 'Firebase is not set up.'; return false; }
     if(!auth || !auth.currentUser){ lastStorageError = 'Not signed in.'; return false; }
+    if(loadFailed){ lastStorageError = 'Not connected: seating data has not loaded yet.'; return false; }
     state.updatedAt = new Date().toISOString();
     try{
       await docRef.set(JSON.parse(JSON.stringify(state)));
@@ -725,7 +743,76 @@
   // ---------- Student view ----------
   let studentQuery = '';
 
+  // ---------- Install hint (Add to Home Screen) ----------
+  let deferredInstall = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; setupInstallHint(); });
+  window.addEventListener('appinstalled', () => { deferredInstall = null; setupInstallHint(); });
+
+  function isStandalone(){
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  }
+
+  function setupInstallHint(){
+    const area = document.getElementById('installArea');
+    if(!area) return;
+    if(isStandalone()){ area.innerHTML = ''; return; }
+    area.innerHTML = `<div class="install-hint">
+        <button class="ghost-btn" id="installBtn">Add to Home Screen · ホーム画面に追加</button>
+        <p class="install-help" id="installHelp" hidden></p>
+      </div>`;
+    document.getElementById('installBtn').addEventListener('click', async () => {
+      if(deferredInstall){
+        deferredInstall.prompt();
+        try{ await deferredInstall.userChoice; }catch(e){}
+        deferredInstall = null;
+        setupInstallHint();
+        return;
+      }
+      const help = document.getElementById('installHelp');
+      const ua = navigator.userAgent || '';
+      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      help.innerHTML = isIOS
+        ? 'In Safari, tap the Share button, then “Add to Home Screen”.<br>Safariで共有ボタン →「ホーム画面に追加」をタップしてください。'
+        : 'Open your browser menu and choose “Install app” or “Add to Home Screen”.<br>ブラウザのメニューから「アプリをインストール」または「ホーム画面に追加」を選んでください。';
+      help.hidden = false;
+    });
+  }
+
+  // ---------- Seating window ----------
+  let lastGate = null;
+  function seatingGate(){
+    const now = new Date();
+    const [sh, sm] = SCHEDULE.start.split(':').map(Number);
+    const openMin = sh * 60 + sm - OPEN_LEAD_MIN;
+    const cur = now.getHours() * 60 + now.getMinutes();
+    if(SCHEDULE.days.includes(now.getDay()) && cur >= openMin) return null; // open
+    // find next opening
+    const en = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], ja = ['日','月','火','水','木','金','土'];
+    for(let add = 0; add <= 7; add++){
+      const d = (now.getDay() + add) % 7;
+      if(!SCHEDULE.days.includes(d)) continue;
+      if(add === 0 && cur >= openMin) continue;
+      const t = String(Math.floor(openMin / 60)) + ':' + String(openMin % 60).padStart(2, '0');
+      return { en: (add === 0 ? 'Today' : en[d]) + ' ' + t, ja: (add === 0 ? '今日' : ja[d] + '曜') + ' ' + t };
+    }
+    return { en: '', ja: '' };
+  }
+
   function renderStudentView(){
+    const gate = seatingGate();
+    lastGate = !!gate;
+    if(gate){
+      view.innerHTML = `
+        <p class="eyebrow">Before you sit down</p>
+        <h1>Seating opens ${OPEN_LEAD_MIN} minutes before class</h1>
+        <p class="sub">Seats can be checked from <b>${gate.en}</b>.</p>
+        <p class="sub-ja">座席は授業開始${OPEN_LEAD_MIN}分前（${gate.ja}）から確認できます。</p>
+        <p class="switch-class"><a href="index.html?choose=1">Not your class? Choose another · クラスを変更</a></p>
+        <div id="installArea"></div>
+      `;
+      setupInstallHint();
+      return;
+    }
     const hasAnySeat = state.assignMode === 'groups'
       ? Object.values(state.groupAssignments).flat().length > 0
       : Object.keys(state.assignments).length > 0;
@@ -742,7 +829,10 @@
       </div>
 
       <div id="resultArea"></div>
+      <p class="switch-class"><a href="index.html?choose=1">Not your class? Choose another · クラスを変更</a></p>
+      <div id="installArea"></div>
     `;
+    setupInstallHint();
 
     const searchInput = document.getElementById('nameSearch');
 
@@ -753,7 +843,7 @@
       refreshStudentResults();
     });
 
-    if(!hasAnySeat && studentQuery.trim().length === 0){
+    if(!loadFailed && !hasAnySeat && studentQuery.trim().length === 0){
       document.getElementById('resultArea').innerHTML = `<p class="empty-note">NO SEATING PUBLISHED YET — CHECK BACK CLOSER TO CLASS TIME</p>`;
     } else {
       refreshStudentResults();
@@ -766,6 +856,11 @@
     const matchList = document.getElementById('matchList');
     const resultArea = document.getElementById('resultArea');
     if(!matchList || !resultArea) return; // student shell not mounted right now
+    if(loadFailed){
+      matchList.innerHTML = '';
+      resultArea.innerHTML = `<p class="empty-note">CAN'T REACH THE SEATING SERVER — CHECK YOUR CONNECTION AND TRY AGAIN<br>接続できません。通信状況を確認してください。</p>`;
+      return;
+    }
 
     const isGroupMode = state.assignMode === 'groups';
     const placedNames = isGroupMode
@@ -1127,6 +1222,7 @@
       document.getElementById('shuffleGroupsBtn').addEventListener('click', () => {
         if(state.roster.length === 0){ showToast('Add students to the roster first'); return; }
         shuffleGroups();
+        state.shuffledAt = new Date().toISOString();
         render();
         autoPublish();
       });
@@ -1353,6 +1449,7 @@
             completed++;
             if(completed === enabledCells.length){
               state.assignments = finalAssignments;
+              state.shuffledAt = new Date().toISOString();
               // Block every seat left empty by this shuffle so it can't be mistaken for an open seat.
               state.autoBlocked = enabledCells.map(c => c.dataset.key).filter(k => !finalAssignments[k]);
               state.autoBlocked.forEach(k => { state.seatEnabled[k] = false; });
@@ -1389,6 +1486,8 @@
     });
 
     let first = true;
+    // If the seating data can't be reached (offline, blocked), say so instead of showing stale seats.
+    setTimeout(() => { if(first){ first = false; loadFailed = true; render(); } }, 8000);
     docRef.onSnapshot(snap => {
       if(snap.metadata && snap.metadata.hasPendingWrites) return;
       const exists = (typeof snap.exists === 'function') ? snap.exists() : snap.exists;
@@ -1399,14 +1498,25 @@
         ensureSeatDefaults();
       }
       lastStorageError = null;
+      loadFailed = false;
       if(first){ first = false; render(); }
       else if(mode === 'student'){ refreshStudentResults(); updateFlightTag(); }
     }, err => {
       lastStorageError = (err && err.message) ? err.message : String(err);
-      if(first){ first = false; render(); }
+      if(first){ first = false; loadFailed = true; render(); }
     });
   }
 
+  if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  }
+
+  // Open / close the seating window as the clock moves.
+  setInterval(() => {
+    if(mode === 'student' && lastGate !== null && lastGate !== !!seatingGate()) render();
+  }, 15000);
+
+  try{ localStorage.setItem('seatcheck-class', CLASS_ID); }catch(e){}
   boot();
 })();
 </script>
