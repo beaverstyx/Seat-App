@@ -543,6 +543,9 @@
     .flap-name{ font-size:9px; max-width:46px; }
     .seat-code{ font-size: 32px; }
   }
+  .free-card{ background: var(--ink-2); border: 1px solid var(--line); border-left: 4px solid var(--amber); border-radius: 12px; padding: 18px 18px 16px; max-width: 520px; }
+  .free-card .free-ja{ word-break: keep-all; overflow-wrap: anywhere; font-size: 16px; line-height: 1.8; margin: 0 0 10px; }
+  .free-card .free-en{ font-size: 13.5px; line-height: 1.6; margin: 0; color: rgba(251,246,235,0.6); }
   .switch-class{ margin:26px 0 0; text-align:center; font-size:12.5px; }
   .switch-class a{ color: rgba(251,246,235,0.55); text-decoration: underline; }
   .install-hint{ margin-top: 26px; text-align:center; }
@@ -780,6 +783,13 @@
 
   // ---------- Seating window ----------
   let lastGate = null;
+  function localYMD(d){
+    d = d || new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  // Teacher can switch a class to free seating for one date; it ends by itself after that day.
+  function freeToday(){ return !!state.freeSeatingDate && state.freeSeatingDate === localYMD(); }
+  function viewKey(){ return freeToday() ? 'free' : (seatingGate() ? 'locked' : 'open'); }
   function seatingGate(){
     const now = new Date();
     const [sh, sm] = SCHEDULE.start.split(':').map(Number);
@@ -799,8 +809,23 @@
   }
 
   function renderStudentView(){
+    lastGate = viewKey();
+    if(freeToday()){
+      view.innerHTML = `
+        <p class="eyebrow">Before you sit down</p>
+        <h1>Free seating today</h1>
+        <p class="sub-ja" style="margin-top:0;font-size:14px;color:rgba(251,246,235,0.7);">今日は自由席です。</p>
+        <div class="free-card">
+          <p class="free-ja">好きな席に座ってください。<br>ただし、<wbr>後ろの席には<wbr>「出る」という<wbr>うわさが…👻<br>前の席のほうが<wbr>運気アップ！<wbr>（たぶん）</p>
+          <p class="free-en">Sit wherever you like. But rumor has it the back row is haunted. 👻 The front seats are much luckier! (Probably.)</p>
+        </div>
+        <p class="switch-class"><a href="index.html?choose=1">Not your class? Choose another · クラスを変更</a></p>
+        <div id="installArea"></div>
+      `;
+      setupInstallHint();
+      return;
+    }
     const gate = seatingGate();
-    lastGate = !!gate;
     if(gate){
       view.innerHTML = `
         <p class="eyebrow">Before you sit down</p>
@@ -1077,6 +1102,20 @@
       </div>
 
       <div class="panel">
+        <h2>Free seating</h2>
+        <p class="desc">Students are told to sit anywhere (with a light-hearted warning about the back row) instead of seeing an assigned seat. It switches off by itself after that date, and the auto-shuffle skips that day.</p>
+        <div class="row-flex">
+          <div class="dim-field">
+            <label>Date</label>
+            <input type="date" id="freeDateInput" value="${escapeAttr(state.freeSeatingDate || localYMD())}" style="width:150px;" />
+          </div>
+          <button class="ghost-btn" id="freeOnBtn" style="align-self:flex-end;">Turn on</button>
+          <button class="ghost-btn" id="freeOffBtn" style="align-self:flex-end;" ${state.freeSeatingDate ? '' : 'disabled'}>Turn off</button>
+        </div>
+        <p class="desc" style="margin-top:10px;">${state.freeSeatingDate ? ('Free seating is set for <b>' + escapeHtml(state.freeSeatingDate) + '</b>' + (state.freeSeatingDate === localYMD() ? ' (today — students see it now).' : '.')) : 'Free seating is off.'}</p>
+      </div>
+
+      <div class="panel">
         <h2>Assignment type</h2>
         <p class="desc">Choose whether students get an individual seat or a group.</p>
         <div class="row-flex">
@@ -1157,6 +1196,19 @@
       </div>
       `}
     `;
+
+    document.getElementById('freeOnBtn').addEventListener('click', () => {
+      const v = document.getElementById('freeDateInput').value;
+      if(!v){ showToast('Pick a date first'); return; }
+      state.freeSeatingDate = v;
+      render();
+      autoPublish();
+    });
+    document.getElementById('freeOffBtn').addEventListener('click', () => {
+      state.freeSeatingDate = '';
+      render();
+      autoPublish();
+    });
 
     document.getElementById('saveSessionBtn').addEventListener('click', () => {
       state.classDate = document.getElementById('classDateInput').value;
@@ -1500,7 +1552,10 @@
       lastStorageError = null;
       loadFailed = false;
       if(first){ first = false; render(); }
-      else if(mode === 'student'){ refreshStudentResults(); updateFlightTag(); }
+      else if(mode === 'student'){
+        if(lastGate !== null && viewKey() !== lastGate) render();
+        else { refreshStudentResults(); updateFlightTag(); }
+      }
     }, err => {
       lastStorageError = (err && err.message) ? err.message : String(err);
       if(first){ first = false; loadFailed = true; render(); }
@@ -1513,7 +1568,7 @@
 
   // Open / close the seating window as the clock moves.
   setInterval(() => {
-    if(mode === 'student' && lastGate !== null && lastGate !== !!seatingGate()) render();
+    if(mode === 'student' && lastGate !== null && lastGate !== viewKey()) render();
   }, 15000);
 
   try{ localStorage.setItem('seatcheck-class', CLASS_ID); }catch(e){}
