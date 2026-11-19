@@ -34,6 +34,7 @@ function jst(date){
 function skipReason(cls, state, now){
   const t = jst(now);
   if(!cls.days.includes(t.day)) return 'not a class day';
+  if(state.freeSeatingDate && state.freeSeatingDate === t.ymd) return 'free seating today';
   const [h, m] = cls.start.split(':').map(Number);
   const start = h * 60 + m;
   if(t.minutes < start - WINDOW_BEFORE_MIN) return 'too early';
